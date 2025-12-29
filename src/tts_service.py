@@ -6,9 +6,13 @@ class TTSService:
     def __init__(self) -> None:
         self.piper_client = PiperBackend()
 
-    async def consume(self, message: TTSMessageData):
-        #TODO Retrive from cache and get user settings
-        response = await self.piper_client.synthesize(message.messageContent, GenderOptions.MALE.value, LanguageOptions.ENGLISH.value)
+    async def consume(self, message: TTSMessageData, params : TTSParams):
+        kwargs = {}
+        if params.gender:
+            kwargs['gender'] = params.gender
+        if params.language:
+            kwargs['language'] = params.language
+        response = await self.piper_client.synthesize(message.messageContent, **kwargs)
         return response
         
 

@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from tts_types import TTSMessageData
+from tts_types import TTSMessageData, TTSParams
 from tts_service import TTSService
 from cache import KVStore, Settings
 import uvicorn
@@ -12,24 +12,40 @@ async def service_status():
     return { "message" : "service is up" }
 
 @app.get("/lang/{speaker_id}")
-async def speaker_language(speaker_id: int):
+async def speaker_language(speaker_id: str):
     value = cache.get(speaker_id, Settings.LANGAUGE)
     return { "speaker language": value }
 
+@app.post("/settings/{speaker_id}")
+async def set_settins(speaker_id: str, settingBody: TTSParams):
+    if settingBody.voice:
+        cache.set(speaker_id, Settings.VOICE, settingBody.voice)
+    if settingBody.gender:
+        cache.set(speaker_id, Settings.GENDER, settingBody.gender)
+    if settingBody.language:
+        cache.set(speaker_id, Settings.LANGAUGE, settingBody.language)
+    return {"status": "updated"}
+
 @app.get("/voice/{speaker_id}")
-async def speaker_voice(speaker_id: int):
+async def speaker_voice(speaker_id: str):
     value = cache.get(speaker_id, Settings.VOICE)
     return { "speaker voice": value }
 
 @app.get("/gender/{speaker_id}")
-async def speaker_gender(speaker_id: int):
+async def speaker_gender(speaker_id: str):
     value = cache.get(speaker_id, Settings.GENDER)
     return { "speaker gender": value }
 
 @app.post("/speak")
 async def speak(message: TTSMessageData):
     #TODO: get settings from KVStore
-    response = await tts_service.consume(message)
+    userID = message.userId
+    voice = cache.get(userID, Settings.VOICE)
+    gender = cache.get(userID, Settings.GENDER)
+    langauge = cache.get(userID, Settings.LANGAUGE)
+
+    params = TTSParams(voice, gender, langauge)
+    response = await tts_service.consume(message, params)
     # TODO: return audio file from transcription
     return { "message": message.messageContent }
     

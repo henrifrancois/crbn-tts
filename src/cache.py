@@ -2,7 +2,7 @@ from enum import Enum
 import json
 
 class Settings(Enum):
-    LANGAUGE = "lang"
+    LANGAUGE = "language"
     VOICE = "voice"
     GENDER = "gender"
 
