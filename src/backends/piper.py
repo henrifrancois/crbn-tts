@@ -30,45 +30,63 @@ class PiperBackend:
         }
     }
 
-    def __init__(self, params: TTSParams) -> None:
+    def __init__(self) -> None:
         self.voices_dir = os.path.join(os.getcwd(), "voices")
+        self.voice = {}
+
+    def get_voice(self, gender="male", language="en") -> PiperVoice:
+        #First check if voice is in dict
+        #self.voices_dir = os.path.join(os.getcwd(), "voices")
         
         # Default to 'en'
-        lang_key = params.language if params.language in self.lang_map else "en"
+        lang_key = language if language in self.lang_map else "en"
         # Default to 'female'
-        gender_key = params.gender if params.gender in self.model_map else "female"
+        gender_key = gender if gender in self.model_map else "female"
         
-        # Determine model name
-        if params.voice:
-             # If exact voice filename provided
-            model_name = params.voice
-        else:
-            model_name = self.model_map[gender_key].get(lang_key)
-            if not model_name:
-                model_name = "en_US-libritts-high" # Ultimate fallback
+
+        model_name = self.model_map[gender_key].get(lang_key)
+
+        if model_name in self.voice:
+            #if we already have the voice loaded, then we can skip
+            return self.voice[model_name]
+        if not model_name:
+            model_name = "en_US-libritts-high" # Ultimate fallback
 
         model_path = os.path.join(self.voices_dir, f"{model_name}.onnx")
         config_path = os.path.join(self.voices_dir, f"{model_name}.onnx.json")
 
-        self.voice = None
         if os.path.exists(model_path) and os.path.exists(config_path):
-            self.voice = PiperVoice.load(model_path, config_path=config_path)
+            self.voice[model_name] = PiperVoice.load(model_path, config_path=config_path)
+            return self.voice[model_name]
         else:
             # For now, we print a warning or handle gracefully if files are missing
             # In a real scenario, we might download them or raise an exception
             print(f"Warning: Voice model not found at {model_path}")
 
-    async def synthesize(self, message: str) -> bytes:
-        if not self.voice:
+    
+
+    async def synthesize(self, message: str, gender="female", language="en" ) -> bytes:
+        try:
+            voice = self.get_voice(gender, language)
+            print(f"Number of speakers: {voice.config.num_speakers}")
+        except:
             raise RuntimeError("Piper voice backend not initialized correctly (model missing).")
 
-        # Piper synthesizes to a wave file object
-        # We capture it in memory
+        
+       # Generate WAV in memory
+ # Generate WAV in memory
         with io.BytesIO() as wav_io:
             with wave.open(wav_io, "wb") as wav_file:
-                self.voice.synthesize(message, wav_file)
+                wav_file.setnchannels(1)
+                wav_file.setsampwidth(2)
+                wav_file.setframerate(voice.config.sample_rate)
+                voice.synthesize_wav(message, wav_file)
             
             wav_bytes = wav_io.getvalue()
+        
+        # USE FOR DEBBUGING, this will write to a .wav file to ensure it works
+        #with open("output.wav", "wb") as f:
+       #      f.write(wav_bytes)
             
         # Convert to OGG OPUS using ffmpeg
         try:
@@ -79,6 +97,8 @@ class PiperBackend:
                 capture_output=True,
                 check=True
             )
+            with open("output.opus", "wb") as f:
+                f.write(process.stdout)
             return process.stdout
         except (subprocess.CalledProcessError, FileNotFoundError) as e:
             print(f"Audio conversion failed or ffmpeg not found: {e}. Returning WAV.")
